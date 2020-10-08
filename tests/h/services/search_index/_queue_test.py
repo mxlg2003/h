@@ -44,12 +44,14 @@ class TestSyncAnnotations:
         batch_indexer.index.assert_not_called()
         assert caplog.records == []
 
-    def test_it_ignores_jobs_beyond_limit(self, annotation_ids, batch_indexer, queue):
-        queue.add_all(annotation_ids, tag="test", scheduled_at=MINUS_FIVE_MINUTES)
+    def test_it_ignores_jobs_beyond_limit(
+        self, all_annotation_ids, batch_indexer, queue
+    ):
+        queue.add_all(all_annotation_ids, tag="test", scheduled_at=MINUS_FIVE_MINUTES)
 
         queue.sync()
 
-        for annotation_id in annotation_ids[LIMIT:]:
+        for annotation_id in all_annotation_ids[LIMIT:]:
             assert annotation_id not in batch_indexer.index.call_args[0][0]
 
     def test_if_the_annotation_isnt_in_the_DB_it_deletes_the_job_from_the_queue(
@@ -58,9 +60,7 @@ class TestSyncAnnotations:
         for annotation in annotations:
             db_session.delete(annotation)
 
-        queue.add_all(
-            annotation_ids[:LIMIT], tag="test", scheduled_at=MINUS_FIVE_MINUTES
-        )
+        queue.add_all(annotation_ids, tag="test", scheduled_at=MINUS_FIVE_MINUTES)
 
         queue.sync()
 
@@ -79,9 +79,7 @@ class TestSyncAnnotations:
         for annotation in annotations:
             annotation.deleted = True
 
-        queue.add_all(
-            annotation_ids[:LIMIT], tag="test", scheduled_at=MINUS_FIVE_MINUTES
-        )
+        queue.add_all(annotation_ids, tag="test", scheduled_at=MINUS_FIVE_MINUTES)
 
         queue.sync()
 
@@ -105,7 +103,7 @@ class TestSyncAnnotations:
             (Any(), Any(), "Syncing 10 annotations that are missing from Elasticsearch")
         ]
         batch_indexer.index.assert_called_once_with(
-            Any.list.containing(annotation_ids[:LIMIT]).only()
+            Any.list.containing(annotation_ids).only()
         )
 
     def test_if_the_annotation_is_already_in_Elastic_it_removes_the_job_from_the_queue(
@@ -119,9 +117,7 @@ class TestSyncAnnotations:
         queue,
     ):
         index(annotations)
-        queue.add_all(
-            annotation_ids[:LIMIT], tag="test", scheduled_at=MINUS_FIVE_MINUTES
-        )
+        queue.add_all(annotation_ids, tag="test", scheduled_at=MINUS_FIVE_MINUTES)
 
         queue.sync()
 
@@ -143,7 +139,7 @@ class TestSyncAnnotations:
             (Any(), Any(), "Syncing 10 annotations that are different in Elasticsearch")
         ]
         batch_indexer.index.assert_called_once_with(
-            Any.list.containing(annotation_ids[:LIMIT]).only()
+            Any.list.containing(annotation_ids).only()
         )
 
     def test_if_there_are_multiple_jobs_with_the_same_annotation_id(
@@ -188,8 +184,12 @@ class TestSyncAnnotations:
         return factories.Annotation.create_batch(size=20)
 
     @pytest.fixture
-    def annotation_ids(self, annotations):
+    def all_annotation_ids(self, annotations):
         return [annotation.id for annotation in annotations]
+
+    @pytest.fixture
+    def annotation_ids(self, all_annotation_ids):
+        return all_annotation_ids[:LIMIT]
 
     @pytest.fixture
     def caplog(self, caplog):
